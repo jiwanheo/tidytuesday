@@ -28,7 +28,7 @@ tuesdata <- tidytuesdayR::tt_load(2021, week = 15)
 ```{r}
 brazil <- tuesdata$brazil_loss %>% 
   pivot_longer(-c(1:3), names_to = "name", values_to = "loss") %>% 
-  summarize(name = "Brazil Deforestation", loss = sum(loss),
+  summarize(name = "Brazil Deforestation", loss = sum(loss) / 100,
             is_bra = TRUE)
 
 losses <- brazil %>% 
@@ -45,7 +45,7 @@ my_plot <- losses  %>%
   scale_fill_manual(values = c(secondary_color, primary_color)) +
   coord_equal(expand = FALSE) +
   facet_wrap(~name, ncol = 1, strip.position = "left") +
-  labs(title = "__<span style = 'color:#A34100;'>Brazil lost more forest</span> in 2001-2013 than size of <span style = 'color:#5F7C50;'>Italy</span>__",
+  labs(title = "In 2001-2013, __<span style = 'color:#A34100;'>Brazil's Deforestation</span>__ was bigger than the size of the __<span style = 'color:#5F7C50;'>Great Lakes</span>__",
        subtitle = expression(paste("1 square = 630 ", km^2, ", size of Toronto", sep = "")),
        caption = "Visualization: @jiwanheo | Data: ourworldindata.org") + 
   theme_void() +
