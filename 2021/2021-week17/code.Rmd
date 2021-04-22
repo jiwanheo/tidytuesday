@@ -1,0 +1,78 @@
+---
+title: "TidyTemplate"
+date: 2021-04-20
+output: html_output
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidytuesdayR)
+library(lubridate)
+library(showtext)
+library(cowplot)
+
+tt <- tt_load("2021-04-20")
+netflix <- tt$netflix_titles
+
+font_add("xkcd", "xkcd.ttf")
+highlight_clr = "#E50914"
+```
+
+```{r}
+# netflix %>%
+#   filter(type == "Movie") %>% 
+#   mutate(duration = as.numeric(str_replace(duration, "\\s.*", ""))) %>% 
+#   mutate(date_added = mdy(date_added)) %>% 
+#   mutate(date_added_year = year(date_added)) %>% 
+#   group_by(date_added_year) %>% 
+#   summarize(median_duration = median(duration)) %>% 
+#   ungroup()
+```
+
+```{r}
+act_data <- tibble(year = c(2010, 2020), median_duration = c(84, 101))
+horizontal_lines <- tibble(year_start = c(2008.5, 2021.5), year_end = c(2015, 2015), median_duration = c(84, 101))
+vertical_line <- tibble(year = 2015, start_duration = 80, end_duration = 102)
+
+my_plot <- ggplot() +
+  geom_segment(data = horizontal_lines, aes(x = year_start, xend = year_end, y = median_duration, yend = median_duration), size = 2) +
+  geom_segment(data = vertical_line, aes(x = year, xend = year, y = start_duration, yend = end_duration), size = 2) +
+  
+  annotate("text", x = 2011.5, y = 82.25, label = "2010", size = 30, family = "xkcd") +
+  annotate("text", x = 2018.5, y = 99.25, label = "2020", size = 30, family = "xkcd") +
+  
+  annotate("text", x = 2007.7, y = 84, label = "84", size = 25, color = highlight_clr, family = "xkcd") +
+  annotate("text", x = 2022.3, y = 101, label = "101", size = 25, color = highlight_clr, family = "xkcd") +
+  expand_limits(x = c(2005, 2025), y = c(80, 102))
+
+showtext_auto()
+
+res <- my_plot +
+  labs(title = "Attention span what?",
+       subtitle = "Median duration of new movies on Netflix has increased 17 minutes",
+       caption = "Visualization: @jiwanheo | #TidyTuesday | Data: Shivam Bansal, Kaggle") +
+  theme_void() +
+  theme(
+    panel.border = element_rect(color = "#000000", fill = NA, size = 2),
+    
+    plot.background = element_rect(fill = "#E1DEE3"),
+    
+    plot.margin = margin(c(1,1,1,1), unit = "cm"),
+    plot.title = element_text(size = 80, family = "xkcd"),
+    plot.subtitle = element_text(color = highlight_clr, size = 25, family = "xkcd", margin = margin(10,0,10,0))
+    
+  )
+
+netflix_logo <- here::here("2021", "2021-week17", "netflix.png")
+
+ggdraw(res) +
+  draw_image(netflix_logo, scale = 0.2, x = 0.375, y = -0.25)
+
+ggsave(here::here("2021", "2021-week17", "output.png"), dpi = 150)
+
+
+dev.off()
+```
+
