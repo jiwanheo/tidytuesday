@@ -1,0 +1,56 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(tidytuesdayR)
+library(ggraph)
+library(tidygraph)
+
+tt <- tt_load("2021-04-27")
+
+ceo <- tt$departures
+```
+
+```{r}
+ceo_df <- ceo %>% 
+  filter(!is.na(ceo_dismissal)) %>%  
+  group_by(fyear, ceo_dismissal) %>% 
+  summarize(weight = n()) %>% 
+  rename(to = fyear) %>% 
+  mutate(from = "yo wuddup") %>% 
+  mutate(label = paste(to, weight, sep = ", ")) %>% 
+  mutate(from = as.factor(from), to = as.factor(to)) %>% 
+  rowwise() %>% 
+  mutate(my_alpha = sample(0:100, 1) / 100) %>%
+  ungroup()
+
+ceo_tidy <- tbl_graph(edges = ceo_df, directed = TRUE) %>% 
+  activate(edges) %>%
+  mutate(switch = as.logical(ceo_df$ceo_dismissal)) %>%
+  mutate(my_alpha = ceo_df$my_alpha) %>% 
+  reroute(from = to, to = from, subset = switch)
+
+my_plot <- ggraph(ceo_tidy, layout = "stress") +
+  geom_edge_arc(aes(width = weight, color = as.factor(switch), alpha = my_alpha), 
+                n = 6,
+                strength = 3,
+                show.legend = FALSE) +
+  scale_edge_color_manual(values = c("#084B83", "#D63230")) +
+  geom_node_point(color = "#D63230", size = 8) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = "#000000")
+  ) +
+  coord_equal()
+
+my_plot
+
+ggsave(here::here("2021", "2021-week18", "output.png"), dpi = 100, width = 10, height = 10)
+```
