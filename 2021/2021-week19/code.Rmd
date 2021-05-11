@@ -1,0 +1,202 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(sf)
+library(countrycode)
+library(cowplot)
+library(showtext)
+library(ggtext)
+library(here)
+
+font_add_google("Heebo", "heebo")
+showtext_auto()
+cowplot::set_null_device("agg")
+
+tuesdata <- tidytuesdayR::tt_load(2021, week = 19)
+
+water <- tuesdata$water
+```
+
+# Processing
+
+```{r}
+water_africa <- water %>% 
+  mutate(country_name = case_when(
+    country_name == "Congo - Kinshasa" ~ "Democratic Republic of the Congo",
+    country_name == "Congo - Brazzaville" ~ "Republic of Congo",
+    country_name == "Swaziland" ~ "Eswatini",
+    country_name == "Tanzania" ~ "United Republic of Tanzania",
+    TRUE ~ country_name)
+  ) %>% 
+  mutate(continent = countrycode(
+    sourcevar = country_name, 
+    origin = "country.name", 
+    destination = "continent")
+  ) %>% 
+  filter(continent == "Africa") %>%
+  mutate(water_source = case_when(
+    str_detect(water_source, "Spring") ~ "Other",
+    str_detect(water_source, "Well") ~ "Well",
+    str_detect(water_source, "Borehole") ~ "Borehole",
+    str_detect(water_source, "Surface Water") ~ "Other",
+    str_detect(water_source, "Piped Water") ~ "Other",
+    TRUE ~ "Other")) %>% 
+  filter(!is.na(water_source))
+```
+
+Don't like how manual this code is, but essentially:
+find the most popular water_source in that country, and its proportion
+```{r}
+top_water_source_by_country <- water_africa %>% 
+  count(country_name, water_source) %>% 
+  group_by(country_name) %>% 
+  top_n(n = 1) %>% 
+  ungroup()
+```
+
+```{r}
+all_africa_map <- map_data("world") %>% 
+  mutate(continent = countrycode(
+    region, 
+    origin = "country.name", 
+    destination = "continent")
+  ) %>% 
+  filter(continent == "Africa")
+
+top_water_source_by_country_map <- top_water_source_by_country %>% 
+  left_join(all_africa_map, by = c("country_name" = "region"))
+```
+
+# Let's graph yall
+
+```{r}
+base_color <- "#373B43"
+main_colors <- c("Borehole" = "#26A6A6", "Well" = "#FF455E", "Other" = "#E9820C")
+bg_color <- "#E0ECF5"
+```
+
+## Big map
+
+This is going to be the "canvas". Notice the Margin.
+
+```{r}
+big_map <- ggplot() +
+  geom_polygon(
+    data = all_africa_map,
+    aes(x = long, y = lat, group = group),
+    fill = base_color,
+    color = bg_color
+  ) +
+  geom_polygon(
+    data = top_water_source_by_country_map,
+    aes(x = long, y = lat, group = group, fill = factor(water_source)),
+    size = 1.1,
+    color = bg_color,
+    show.legend = FALSE
+  ) +
+  scale_fill_manual(values = main_colors) +
+  coord_map() +
+  theme_void() +
+  labs(title = "in Africa exists as limited water points for many <br>countries. The <span style = 'color:#26A6A6;'>Borehole</span> (small, machine-drilled<br>tunnel), is often the #1 source of water, trailed<br>by <span style = 'color:#FF455E;'>Hand-dug wells</span> and <span style = 'color:#E9820C;'>Others,</span> such as springs<br>and surface water.") +
+  theme(
+    plot.background = element_rect(fill = bg_color, color = bg_color),
+    plot.margin = unit(c(6, 0, -3, 7), "cm"),
+    plot.title = element_markdown(
+      size = 15, 
+      color = base_color, 
+      family = "heebo", 
+      lineheight = 1.2
+    )   
+  )
+```
+
+## Small map
+
+This took me some time, but create 3 different maps, and place them onto the canvas using cowplot::draw_plot
+
+```{r}
+graph_per_source <- function(wsource, legend_bool = FALSE) {
+  
+  df <- water_africa %>% 
+    filter(water_source == wsource) %>% 
+    group_by(country_name) %>% 
+    summarize(cnt = n()) %>% 
+    ungroup()
+  
+  output_per_wsource <- df %>% 
+    left_join(all_africa_map, by = c("country_name" = "region"))
+  
+  ggplot() +
+    geom_polygon(
+      data = all_africa_map,
+      aes(x = long, y = lat,group = group),
+      fill = base_color,
+      color = bg_color
+    ) + 
+    geom_polygon(
+      data = output_per_wsource,
+      aes(x = long, y = lat,group = group, fill = cnt),
+      color = "#000000",
+      show.legend = legend_bool
+    ) +
+    scale_fill_gradient(
+      low = base_color, 
+      high = main_colors[wsource], 
+      breaks = c(10, 100, 1000, 10000), 
+      label = c("10 (# Water Points)", "100", "1,000", "10,000"), 
+      trans = "log"
+    ) +
+    coord_map() +
+    theme_void() +
+    labs(fill = "# Water Points") +
+    theme(
+      plot.background = element_rect(fill = bg_color, color = bg_color),
+      plot.margin = unit(c(0, 0, -0.6, 0), "cm"),
+      legend.box.margin = unit(c(0, 0, 0, 1), "cm"),
+      legend.title = element_blank(),
+      legend.text = element_text(color = base_color, family = "heebo")
+    ) +
+    guides(fill = guide_colorbar(barheight = 6.5))
+}
+```
+
+## Combination
+
+```{r}
+my_legend <- get_legend(graph_per_source("Well", legend_bool = TRUE))
+my_text <- get_title(big_map)
+
+logo <- here::here("2021", "2021-week19", "wpdx.png")
+
+output <- ggdraw(big_map + theme(plot.title = element_blank())) + 
+  
+  annotate("text", x = 0.1, y = 0.27, hjust = 0, colour = base_color, family = "heebo", fontface = "bold", label = "WATER SUPPLY", size = 14) +
+  
+  draw_plot(graph_per_source("Borehole"), scale = 0.25, x = -0.30,  y = 0.3) +
+  draw_plot(graph_per_source("Other"),    scale = 0.25, x = -0.30,  y = 0.0) +
+  draw_plot(graph_per_source("Well"),     scale = 0.25, x = -0.06,  y = 0.3) +
+  
+  draw_plot(my_legend, x = 0.100, y =  0.30) +
+  draw_plot(my_text,   x = 0.105, y = -0.76) +
+  
+  draw_image(logo, scale = 0.18, x = 0.32, y = 0.35) +
+  
+  annotate("text", x = 0.1, y = 0.965, hjust = -1, colour = base_color, family = "heebo", fontface = "bold", label = "Visualization: @jiwanheo | #TidyTuesday | Data: Water Point Data Exchange", size = 3)
+
+
+# output + ggsave(here("2021", "2021-week19", "test.png"), dpi = 100)
+# white_untrimmed <- magick::image_read(here("2021", "2021-week19", "test.png"))
+# white_trimmed <- magick::image_trim(white_untrimmed)
+# magick::image_write(white_trimmed, here("2021", "2021-week19", "final.png"))
+```
+
+
+
